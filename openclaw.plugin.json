@@ -2,8 +2,17 @@
   "id": "bmad-method",
   "name": "BMad Method",
   "description": "AI-driven agile development framework — the BMad Method as an OpenClaw plugin. Installs the official, always-current bmad-method skill catalog per-project and registers agent tools for skill dispatch and state tracking.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "kind": "tool",
+  "contracts": {
+    "tools": [
+      "bmad_init_project",
+      "bmad_list_skills",
+      "bmad_start_skill",
+      "bmad_complete_skill",
+      "bmad_get_state"
+    ]
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
