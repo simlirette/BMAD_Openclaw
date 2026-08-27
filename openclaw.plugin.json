@@ -1,23 +1,23 @@
 {
   "id": "bmad-method",
   "name": "BMad Method",
-  "description": "AI-driven agile development framework — the BMad Method as an OpenClaw plugin. Registers agent tools for workflow orchestration, step-by-step execution, and artifact management.",
-  "version": "0.1.0",
+  "description": "AI-driven agile development framework — the BMad Method as an OpenClaw plugin. Installs the official, always-current bmad-method skill catalog per-project and registers agent tools for skill dispatch and state tracking.",
+  "version": "0.2.0",
   "kind": "tool",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {
-      "bmadMethodPath": {
+      "bmadVersion": {
         "type": "string",
-        "description": "Path to the BMad method files directory. Defaults to the bundled copy."
+        "description": "npm dist-tag or exact version of bmad-method to install for new projects (e.g. \"latest\", \"next\", \"6.11.0\"). Defaults to \"latest\"."
       }
     }
   },
   "uiHints": {
-    "bmadMethodPath": {
-      "label": "BMad Method Path",
-      "placeholder": "Leave empty to use bundled BMad method files"
+    "bmadVersion": {
+      "label": "BMad-METHOD Version",
+      "placeholder": "latest"
     }
   }
 }

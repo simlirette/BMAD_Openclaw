@@ -9,100 +9,41 @@ export interface BmadState {
   projectPath: string;
   /** ISO timestamp of project init */
   createdAt: string;
-  /** Current BMad phase: analysis | planning | solutioning | implementation */
-  currentPhase: BmadPhase;
-  /** Currently active workflow, if any */
-  activeWorkflow: ActiveWorkflow | null;
-  /** Completed workflows with their output artifacts */
-  completedWorkflows: CompletedWorkflow[];
+  /** BMad-METHOD version installed by `bmad_init_project` (from package.json) */
+  installedVersion: string | null;
+  /** Currently active skill invocation, if any */
+  activeSkill: ActiveSkill | null;
+  /** Completed skill invocations */
+  completedSkills: CompletedSkill[];
 }
 
-export type BmadPhase =
-  | "analysis"
-  | "planning"
-  | "solutioning"
-  | "implementation";
-
-export interface ActiveWorkflow {
-  /** Workflow ID, e.g. "create-product-brief" */
+export interface ActiveSkill {
+  /** Skill ID, e.g. "bmad-product-brief" */
   id: string;
-  /** Agent persona currently active */
-  agentId: string;
-  /** Agent display name */
-  agentName: string;
-  /** Execution mode */
+  /** Execution mode passed to the sub-agent */
   mode: "normal" | "yolo";
-  /** Current step number (1-based) */
-  currentStep: number;
-  /** Total steps in this workflow (if known) */
-  totalSteps: number | null;
-  /** Path to the current step file */
-  currentStepFile: string;
-  /** Path to the workflow output file */
-  outputFile: string;
-  /** Last step number that was saved (for duplicate-save protection) */
-  lastSavedStep?: number;
-  /** ISO timestamp when workflow started */
+  /** ISO timestamp when the skill was dispatched */
   startedAt: string;
 }
 
-export interface CompletedWorkflow {
+export interface CompletedSkill {
   id: string;
-  agentId: string;
-  outputFile: string;
+  /** Free-form summary the sub-agent reported back (e.g. the skill's JSON status block) */
+  summary: string;
   completedAt: string;
 }
 
-// ── Workflow Registry ────────────────────────────────────────────────────────
+// ── Skill registry (dynamic — scanned from installed .agents/skills/) ────────
 
-export interface WorkflowDefinition {
-  /** Unique workflow ID */
+export interface SkillDefinition {
+  /** Skill ID — the directory name under .agents/skills/, e.g. "bmad-product-brief" */
   id: string;
-  /** Display name */
+  /** Display name from SKILL.md frontmatter */
   name: string;
-  /** Short description */
+  /** Description from SKILL.md frontmatter */
   description: string;
-  /** Which phase this belongs to */
-  phase: BmadPhase;
-  /** Agent that runs this workflow */
-  agentId: string;
-  /** Relative path to workflow.md or workflow.yaml from bmad-method root */
-  workflowFile: string;
-  /** Relative path to the steps directory (if step-file architecture) */
-  stepsDir: string | null;
-  /** Required input artifacts (workflow IDs that must be completed first) */
-  requires: string[];
-}
-
-export interface AgentPersona {
-  id: string;
-  name: string;
-  title: string;
-  role: string;
-  identity: string;
-  communicationStyle: string;
-  principles: string;
-}
-
-// ── Step file parsed data ────────────────────────────────────────────────────
-
-export interface StepFile {
-  /** Step number (extracted from filename) */
-  stepNumber: number;
-  /** Step name from frontmatter */
-  name: string;
-  /** Step description from frontmatter */
-  description: string;
-  /** Path to the next step file (from frontmatter) */
-  nextStepFile: string | null;
-  /** Path to the output file (from frontmatter) */
-  outputFile: string | null;
-  /** Full markdown content (without frontmatter) */
-  content: string;
-  /** Raw frontmatter data */
-  frontmatter: Record<string, unknown>;
-  /** Absolute path to this step file */
-  filePath: string;
+  /** Absolute path to the skill's SKILL.md */
+  skillFile: string;
 }
 
 // ── Plugin API types (minimal interface for what we need from OpenClaw) ──────

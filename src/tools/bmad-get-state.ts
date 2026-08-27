@@ -1,6 +1,6 @@
 /**
  * bmad_get_state — Return current project state.
- * Used by master agent and dashboard to understand project progress.
+ * Used by the master agent to understand project progress.
  */
 
 import { Type } from "@sinclair/typebox";
@@ -9,7 +9,7 @@ import type { ToolResult } from "../types.ts";
 
 export const name = "bmad_get_state";
 export const description =
-  "Get the current BMad project state — active workflow, completed artifacts, phase, and step progress.";
+  "Get the current BMad project state — installed version, active skill, and completed skills.";
 
 export const parameters = Type.Object({
   projectPath: Type.String({
@@ -29,39 +29,31 @@ export async function execute(
   const lines = [
     `## BMad Project: ${state.projectName}`,
     "",
-    `**Phase:** ${state.currentPhase}`,
+    `**BMad-METHOD version:** ${state.installedVersion ?? "unknown"}`,
     `**Initialized:** ${state.createdAt}`,
     "",
   ];
 
-  if (state.activeWorkflow) {
-    const w = state.activeWorkflow;
-    const stepLabel = w.totalSteps
-      ? `${w.currentStep} of ${w.totalSteps}`
-      : `${w.currentStep}`;
-    lines.push("### Active Workflow");
-    lines.push(`- **Workflow:** ${w.id}`);
-    lines.push(`- **Agent:** ${w.agentName} (${w.agentId})`);
-    lines.push(`- **Mode:** ${w.mode}`);
-    lines.push(`- **Step:** ${stepLabel}`);
-    lines.push(`- **Output:** ${w.outputFile || "not yet set"}`);
-    lines.push(`- **Started:** ${w.startedAt}`);
+  if (state.activeSkill) {
+    const s = state.activeSkill;
+    lines.push("### Active Skill");
+    lines.push(`- **Skill:** ${s.id}`);
+    lines.push(`- **Mode:** ${s.mode}`);
+    lines.push(`- **Started:** ${s.startedAt}`);
     lines.push("");
   } else {
-    lines.push("### Active Workflow");
+    lines.push("### Active Skill");
     lines.push("None");
     lines.push("");
   }
 
-  if (state.completedWorkflows.length > 0) {
-    lines.push("### Completed Workflows");
-    for (const w of state.completedWorkflows) {
-      lines.push(
-        `- **${w.id}** — ${w.completedAt} → \`${w.outputFile}\``
-      );
+  if (state.completedSkills.length > 0) {
+    lines.push("### Completed Skills");
+    for (const w of state.completedSkills) {
+      lines.push(`- **${w.id}** — ${w.completedAt}`);
     }
   } else {
-    lines.push("### Completed Workflows");
+    lines.push("### Completed Skills");
     lines.push("None yet");
   }
 

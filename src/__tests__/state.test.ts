@@ -6,7 +6,7 @@ import {
   readState,
   writeState,
   createInitialState,
-  bmadDir,
+  stateDir,
   statePath,
 } from "../lib/state.ts";
 
@@ -27,23 +27,28 @@ describe("state", () => {
   });
 
   it("createInitialState creates valid state", () => {
-    const state = createInitialState(tempDir, "Test Project");
+    const state = createInitialState(tempDir, "Test Project", "6.11.0");
     expect(state.projectName).toBe("Test Project");
     expect(state.projectPath).toBe(tempDir);
-    expect(state.currentPhase).toBe("analysis");
-    expect(state.activeWorkflow).toBeNull();
-    expect(state.completedWorkflows).toEqual([]);
+    expect(state.installedVersion).toBe("6.11.0");
+    expect(state.activeSkill).toBeNull();
+    expect(state.completedSkills).toEqual([]);
+  });
+
+  it("createInitialState tolerates an unknown installed version", () => {
+    const state = createInitialState(tempDir, "Test Project", null);
+    expect(state.installedVersion).toBeNull();
   });
 
   it("writeState + readState roundtrip", async () => {
-    const state = createInitialState(tempDir, "Test Project");
+    const state = createInitialState(tempDir, "Test Project", "6.11.0");
     await writeState(tempDir, state);
     const loaded = await readState(tempDir);
     expect(loaded).toEqual(state);
   });
 
-  it("bmadDir and statePath return correct paths", () => {
-    expect(bmadDir("/foo/bar")).toBe("/foo/bar/_bmad");
-    expect(statePath("/foo/bar")).toBe("/foo/bar/_bmad/state.json");
+  it("stateDir and statePath use .bmad-openclaw, not _bmad (owned by the installer)", () => {
+    expect(stateDir("/foo/bar")).toBe(join("/foo/bar", ".bmad-openclaw"));
+    expect(statePath("/foo/bar")).toBe(join("/foo/bar", ".bmad-openclaw", "state.json"));
   });
 });

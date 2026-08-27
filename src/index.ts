@@ -1,53 +1,38 @@
 /**
  * BMad Method Plugin for OpenClaw
  *
- * Registers agent tools for BMad workflow orchestration.
- * The BMad Master agent calls these tools to execute workflows step-by-step.
+ * Registers agent tools for BMad skill dispatch. The BMad Master agent calls
+ * these tools to install, enumerate, and dispatch official BMad-METHOD
+ * skills to spawned sub-agents.
  *
- * Architecture (V3 — multi-agent):
- * - BMad Master is a top-level agent that orchestrates workflows
- * - Each workflow spawns a sub-agent (Analyst, PM, Architect, etc.)
- * - Plugin tools handle step loading, persona injection, state tracking, artifact saving
- * - YOLO mode: sub-agent runs autonomously
- * - Interactive mode: sub-agent pauses per step for user feedback
+ * Architecture (V4 — thin dispatcher over the official skill engine):
+ * - BMad Master is a top-level agent that orchestrates project progress
+ * - `bmad_init_project` runs the OFFICIAL `npx bmad-method@<version> install`
+ *   against the project (targeting the openclaw platform) — no vendored
+ *   copy is bundled with this plugin, so projects always get whatever is
+ *   current on npm.
+ * - Each dispatched skill spawns a sub-agent that loads and runs its own
+ *   SKILL.md directly; this plugin does not parse or re-implement skill
+ *   internals (the pre-v6.2.0 version of this plugin did, and broke when
+ *   BMad-METHOD's internal file layout changed upstream).
+ * - YOLO mode: dispatch tells the sub-agent to use the skill's own headless
+ *   mode. Interactive mode: dispatch tells it to run the skill normally.
  */
 
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import * as bmadInitProject from "./tools/bmad-init-project.ts";
-import * as bmadListWorkflows from "./tools/bmad-list-workflows.ts";
-import * as bmadStartWorkflow from "./tools/bmad-start-workflow.ts";
-import * as bmadLoadStep from "./tools/bmad-load-step.ts";
-import * as bmadSaveArtifact from "./tools/bmad-save-artifact.ts";
-import * as bmadCompleteWorkflow from "./tools/bmad-complete-workflow.ts";
+import * as bmadListSkills from "./tools/bmad-list-skills.ts";
+import * as bmadStartSkill from "./tools/bmad-start-skill.ts";
+import * as bmadCompleteSkill from "./tools/bmad-complete-skill.ts";
 import * as bmadGetState from "./tools/bmad-get-state.ts";
+
 /** All tool modules */
 const TOOLS = [
   bmadInitProject,
-  bmadListWorkflows,
-  bmadStartWorkflow,
-  bmadLoadStep,
-  bmadSaveArtifact,
-  bmadCompleteWorkflow,
+  bmadListSkills,
+  bmadStartSkill,
+  bmadCompleteSkill,
   bmadGetState,
 ] as const;
-
-/**
- * Resolve the path to bundled BMad method files.
- * Default: <plugin-root>/bmad-method/
- */
-function resolveBmadMethodPath(pluginConfig: Record<string, unknown>): string {
-  if (
-    typeof pluginConfig?.bmadMethodPath === "string" &&
-    pluginConfig.bmadMethodPath.length > 0
-  ) {
-    return pluginConfig.bmadMethodPath;
-  }
-  // Default to bundled method files
-  const pluginRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-  return join(pluginRoot, "bmad-method");
-}
 
 /**
  * Plugin registration function — called by OpenClaw on load.
@@ -69,12 +54,17 @@ export default function register(api: {
     (api.config as { plugins?: { entries?: { "bmad-method"?: { config?: Record<string, unknown> } } } })
       ?.plugins?.entries?.["bmad-method"]?.config ?? {};
 
-  const bmadMethodPath = resolveBmadMethodPath(pluginConfig);
+  const defaultVersion =
+    typeof pluginConfig?.bmadVersion === "string" && pluginConfig.bmadVersion.length > 0
+      ? pluginConfig.bmadVersion
+      : "latest";
 
-  api.logger.info(`BMad Method plugin loaded. Method path: ${bmadMethodPath}`);
+  api.logger.info(
+    `BMad Method plugin loaded. New projects install BMad-METHOD "${defaultVersion}" via the official installer (no bundled copy).`
+  );
 
   // Context passed to tool execute functions
-  const toolContext = { bmadMethodPath };
+  const toolContext = { defaultVersion };
 
   for (const tool of TOOLS) {
     api.registerTool(

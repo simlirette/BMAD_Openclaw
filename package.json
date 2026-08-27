@@ -1,7 +1,7 @@
 {
   "name": "bmad-method",
-  "version": "0.1.0",
-  "description": "BMad Method plugin for OpenClaw — AI-driven agile development workflow orchestration",
+  "version": "0.2.0",
+  "description": "BMad Method plugin for OpenClaw — dispatches the official, always-current bmad-method skill catalog to spawned sub-agents",
   "type": "module",
   "main": "src/index.ts",
   "openclaw": {

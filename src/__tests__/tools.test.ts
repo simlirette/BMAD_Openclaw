@@ -4,15 +4,38 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { execute as initProject } from "../tools/bmad-init-project.ts";
-import { execute as listWorkflows } from "../tools/bmad-list-workflows.ts";
+import { execute as listSkills } from "../tools/bmad-list-skills.ts";
+import { execute as startSkill } from "../tools/bmad-start-skill.ts";
+import { execute as completeSkill } from "../tools/bmad-complete-skill.ts";
 import { execute as getState } from "../tools/bmad-get-state.ts";
-import { execute as saveArtifact } from "../tools/bmad-save-artifact.ts";
-import { execute as completeWorkflow } from "../tools/bmad-complete-workflow.ts";
+import { writeState, createInitialState } from "../lib/state.ts";
+import { skillsDir } from "../lib/skill-registry.ts";
 
-const BMAD_METHOD = join(import.meta.dirname, "../../bmad-method");
-const ctx = { bmadMethodPath: BMAD_METHOD };
+/**
+ * bmad_init_project now shells out to the real `npx bmad-method@<version>
+ * install` — that's a real network call, unsuitable for the default fast/
+ * offline unit test run. These tests exercise everything reachable
+ * WITHOUT triggering the installer (the pre-install guard clauses), and
+ * seed `.bmad-openclaw/state.json` + `.agents/skills/` fixtures by hand for
+ * the tools that operate on an already-initialized project.
+ *
+ * A real end-to-end install is covered separately, opt-in only
+ * (BMAD_OPENCLAW_INTEGRATION_TEST=1), at the bottom of this file.
+ */
 
-describe("tool: bmad_init_project", () => {
+async function seedInitializedProject(tempDir: string) {
+  const state = createInitialState(tempDir, "Test Project", "6.11.0");
+  await writeState(tempDir, state);
+  const skillDir = join(skillsDir(tempDir), "bmad-product-brief");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(
+    join(skillDir, "SKILL.md"),
+    "---\nname: bmad-product-brief\ndescription: Create, update, or validate a product brief.\n---\n\nBody.\n",
+    "utf-8"
+  );
+}
+
+describe("tool: bmad_init_project (guard clauses, no network)", () => {
   let tempDir: string;
 
   beforeEach(async () => {
@@ -23,61 +46,108 @@ describe("tool: bmad_init_project", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("initializes a new project", async () => {
-    const result = await initProject(
-      "test",
-      { projectPath: tempDir, projectName: "My Project" },
-      ctx
-    );
+  it("rejects nonexistent directory before attempting to install", async () => {
+    const result = await initProject("t", {
+      projectPath: "/nonexistent/path",
+      projectName: "P",
+    });
+    expect(result.content[0].text).toContain("Error");
+    expect(result.content[0].text).toContain("does not exist");
+  });
+
+  it("reports already-initialized without re-running the installer", async () => {
+    await seedInitializedProject(tempDir);
+    const result = await initProject("t", {
+      projectPath: tempDir,
+      projectName: "P2",
+    });
     const text = result.content[0].text;
-    expect(text).toContain("✅");
-    expect(text).toContain("My Project");
-    expect(text).toContain("state.json");
+    expect(text).toContain("already initialized");
+    expect(text).toContain("6.11.0");
+  });
+});
+
+describe("tool: bmad_list_skills", () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "bmad-tool-test-"));
+    await seedInitializedProject(tempDir);
   });
 
-  it("rejects double initialization", async () => {
-    await initProject("t", { projectPath: tempDir, projectName: "P1" }, ctx);
-    const result = await initProject(
-      "t",
-      { projectPath: tempDir, projectName: "P2" },
-      ctx
-    );
-    expect(result.content[0].text).toContain("already initialized");
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("rejects nonexistent directory", async () => {
-    const result = await initProject(
-      "t",
-      { projectPath: "/nonexistent/path", projectName: "P" },
-      ctx
-    );
+  it("lists installed skills scanned from .agents/skills/", async () => {
+    const result = await listSkills("t", { projectPath: tempDir });
+    const text = result.content[0].text;
+    expect(text).toContain("bmad-product-brief");
+    expect(text).toContain("6.11.0");
+  });
+
+  it("errors for uninitialized project", async () => {
+    const result = await listSkills("t", { projectPath: "/tmp/nowhere" });
     expect(result.content[0].text).toContain("Error");
   });
 });
 
-describe("tool: bmad_list_workflows", () => {
+describe("tool: bmad_start_skill / bmad_complete_skill", () => {
   let tempDir: string;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "bmad-tool-test-"));
-    await initProject("t", { projectPath: tempDir, projectName: "Test" }, ctx);
+    await seedInitializedProject(tempDir);
   });
 
   afterEach(async () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("lists available workflows for fresh project", async () => {
-    const result = await listWorkflows("t", { projectPath: tempDir });
+  it("dispatches a known skill and returns a task prompt naming its SKILL.md", async () => {
+    const result = await startSkill("t", {
+      projectPath: tempDir,
+      skill: "bmad-product-brief",
+      mode: "yolo",
+    });
     const text = result.content[0].text;
-    expect(text).toContain("create-product-brief");
-    expect(text).toContain("market-research");
-    // Should not show workflows with prerequisites
-    expect(text).not.toContain("create-prd —");
+    expect(text).toContain("bmad-product-brief");
+    expect(text).toContain("SKILL.md");
+    expect(text).toContain("YOLO");
   });
 
-  it("errors for uninitialized project", async () => {
-    const result = await listWorkflows("t", { projectPath: "/tmp/nowhere" });
+  it("rejects an unknown skill id", async () => {
+    const result = await startSkill("t", {
+      projectPath: tempDir,
+      skill: "bmad-does-not-exist",
+      mode: "normal",
+    });
+    expect(result.content[0].text).toContain("Unknown skill");
+  });
+
+  it("rejects starting a second skill while one is active", async () => {
+    await startSkill("t", { projectPath: tempDir, skill: "bmad-product-brief", mode: "normal" });
+    const result = await startSkill("t", {
+      projectPath: tempDir,
+      skill: "bmad-product-brief",
+      mode: "normal",
+    });
+    expect(result.content[0].text).toContain("already in progress");
+  });
+
+  it("completes the active skill and records the summary", async () => {
+    await startSkill("t", { projectPath: tempDir, skill: "bmad-product-brief", mode: "normal" });
+    const result = await completeSkill("t", {
+      projectPath: tempDir,
+      summary: '{"status":"complete"}',
+    });
+    const text = result.content[0].text;
+    expect(text).toContain("completed");
+    expect(text).toContain('{"status":"complete"}');
+  });
+
+  it("errors when completing with no active skill", async () => {
+    const result = await completeSkill("t", { projectPath: tempDir });
     expect(result.content[0].text).toContain("Error");
   });
 });
@@ -87,7 +157,7 @@ describe("tool: bmad_get_state", () => {
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "bmad-tool-test-"));
-    await initProject("t", { projectPath: tempDir, projectName: "Test" }, ctx);
+    await seedInitializedProject(tempDir);
   });
 
   afterEach(async () => {
@@ -97,41 +167,34 @@ describe("tool: bmad_get_state", () => {
   it("returns project state", async () => {
     const result = await getState("t", { projectPath: tempDir });
     const text = result.content[0].text;
-    expect(text).toContain("Test");
-    expect(text).toContain("analysis");
+    expect(text).toContain("Test Project");
+    expect(text).toContain("6.11.0");
     expect(text).toContain("None");
   });
 });
 
-describe("tool: bmad_save_artifact", () => {
+// ── Opt-in integration test — hits the real npm registry ────────────────────
+const runIntegration = process.env.BMAD_OPENCLAW_INTEGRATION_TEST === "1";
+describe.skipIf(!runIntegration)("integration: real `npx bmad-method@latest install`", () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), "bmad-tool-test-"));
-    await initProject("t", { projectPath: tempDir, projectName: "Test" }, ctx);
+    tempDir = await mkdtemp(join(tmpdir(), "bmad-integration-test-"));
   });
 
   afterEach(async () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("saves artifact to specified path", async () => {
-    const result = await saveArtifact("t", {
+  it("installs a real, current skill catalog end to end", async () => {
+    const result = await initProject("t", {
       projectPath: tempDir,
-      content: "# Product Brief\n\nThis is a test.",
-      outputFile: "_bmad-output/planning-artifacts/product-brief.md",
+      projectName: "Integration Test",
     });
     const text = result.content[0].text;
     expect(text).toContain("✅");
-    expect(text).toContain("product-brief.md");
-  });
 
-  it("rejects empty content", async () => {
-    const result = await saveArtifact("t", {
-      projectPath: tempDir,
-      content: "",
-      outputFile: "_bmad-output/test.md",
-    });
-    expect(result.content[0].text).toContain("Error");
-  });
+    const list = await listSkills("t", { projectPath: tempDir });
+    expect(list.content[0].text).toContain("bmad-");
+  }, 5 * 60 * 1000);
 });
